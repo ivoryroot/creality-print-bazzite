@@ -1,0 +1,10 @@
+# AppImages belong in release assets, not Git history.
+*.[Aa]pp[Ii]mage
+/.work/
+/dist/
+/backups/
+/tools/
+/squashfs-root/
+__pycache__/
+*.py[cod]
+*.log

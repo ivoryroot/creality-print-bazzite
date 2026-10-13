@@ -1,0 +1,69 @@
+#!/bin/bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Adapted from Creality Print 7.3.0.6157 AppRun.
+# Compatibility modifications: crealityprint-bazzite contributors, 2026-10-13.
+set -e
+
+# Quote each step: AppDirs and symlinks may live in paths containing spaces.
+DIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
+export APPDIR="$DIR"
+export LD_LIBRARY_PATH="$DIR/bin:$DIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Use app-specific overrides: Bazzite sessions can globally set GDK_BACKEND to
+# wayland, which must not silently defeat this package's compatibility default.
+export GDK_BACKEND="${CREALITYPRINT_GDK_BACKEND:-x11}"
+export WEBKIT_DISABLE_DMABUF_RENDERER="${CREALITYPRINT_WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
+# Retain upstream's workaround for locale-related crashes.
+export LC_ALL=C
+
+# Retain upstream's hybrid-GPU workaround, respecting explicit PRIME offload.
+if [ -z "${__GLX_VENDOR_LIBRARY_NAME+x}" ] &&
+   [ "${__NV_PRIME_RENDER_OFFLOAD:-0}" != "1" ] &&
+   [ -z "${DRI_PRIME:-}" ]; then
+    have_nvidia_glx=0
+    if command -v ldconfig >/dev/null 2>&1 &&
+       ldconfig -p 2>/dev/null | grep -q 'libGLX_nvidia\.so\.0'; then
+        have_nvidia_glx=1
+    else
+        for glx_library in /usr/lib/*/libGLX_nvidia.so.0 \
+            /usr/lib*/libGLX_nvidia.so.0 /lib/*/libGLX_nvidia.so.0 \
+            /lib*/libGLX_nvidia.so.0; do
+            if [ -e "$glx_library" ]; then
+                have_nvidia_glx=1
+                break
+            fi
+        done
+    fi
+    if [ "$have_nvidia_glx" = "1" ]; then
+        for drm_device in /sys/class/drm/card*/device; do
+            boot_vga=$(cat "$drm_device/boot_vga" 2>/dev/null || true)
+            gpu_vendor=$(cat "$drm_device/vendor" 2>/dev/null || true)
+            if [ "$boot_vga" = "1" ] && [ -n "$gpu_vendor" ] &&
+               [ "$gpu_vendor" != "0x10de" ]; then
+                export __GLX_VENDOR_LIBRARY_NAME=mesa
+                break
+            fi
+        done
+    fi
+fi
+
+if [ "${1:-}" = "--compat-diagnostics" ]; then
+    printf 'Creality Print — Bazzite compatibility diagnostics\n'
+    printf 'GDK_BACKEND=%s\nWEBKIT_DISABLE_DMABUF_RENDERER=%s\nLC_ALL=%s\n' \
+        "$GDK_BACKEND" "$WEBKIT_DISABLE_DMABUF_RENDERER" "$LC_ALL"
+    printf 'GLX vendor=%s\n' "${__GLX_VENDOR_LIBRARY_NAME:-automatic}"
+    cat "$DIR/usr/share/crealityprint-bazzite/build.json"
+    printf '\nLibrary resolution on this host:\n'
+    dependencies=$(ldd "$DIR/bin/CrealityPrint" 2>&1) || {
+        printf '%s\n' "$dependencies"
+        exit 1
+    }
+    printf '%s\n' "$dependencies"
+    if printf '%s\n' "$dependencies" | grep -Eq 'not found|no version information'; then
+        exit 1
+    fi
+    exit 0
+fi
+
+# Preserve model filenames, argument boundaries, exit status and signals.
+exec "$DIR/bin/CrealityPrint" "$@"

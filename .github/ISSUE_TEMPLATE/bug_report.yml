@@ -1,0 +1,23 @@
+name: Compatibility problem
+description: Report a launcher, packaging or Bazzite compatibility problem.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Creality version, compatibility revision, Bazzite version, GPU/driver and Wayland or X11.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: What happened?
+      description: Include the launch command, what you expected and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic output
+      description: Run the AppImage with --compat-diagnostics. Remove private paths, printer addresses and account details before posting.
+      render: text
